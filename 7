@@ -1,0 +1,80 @@
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"net/http"
+	"time"
+)
+
+var (
+	urlMap   = make(map[string]string)
+	charPool = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	baseURL  = "https://example.com/"
+)
+
+func main() {
+	http.HandleFunc("/", handleRoot)
+	http.HandleFunc("/shorten", handleShorten)
+	http.HandleFunc("/redirect", handleRedirect)
+
+	fmt.Println("GoURLShortener is running on http://localhost:8080")
+	http.ListenAndServe(":8080", nil)
+}
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Welcome to GoURLShortener!")
+}
+
+func handleShorten(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	url := r.FormValue("url")
+
+	if url == "" {
+		http.Error(w, "URL cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	shortURL := generateShortURL()
+	urlMap[shortURL] = url
+
+	response := struct {
+		ShortURL string `json:"short_url"`
+	}{
+		ShortURL: baseURL + shortURL,
+	}
+
+	fmt.Fprintf(w, "Shortened URL: %s\n", response.ShortURL)
+}
+
+func handleRedirect(w http.ResponseWriter, r *http.Request) {
+	shortURL := r.URL.Query().Get("short_url")
+
+	if shortURL == "" {
+		http.Error(w, "Short URL cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	url, ok := urlMap[shortURL]
+	if !ok {
+		http.Error(w, "Invalid short URL", http.StatusNotFound)
+		return
+	}
+
+	http.Redirect(w, r, url, http.StatusFound)
+}
+
+func generateShortURL() string {
+	rand.Seed(time.Now().UnixNano())
+
+	shortURL := make([]byte, 6)
+	for i := range shortURL {
+		shortURL[i] = charPool[rand.Intn(len(charPool))]
+	}
+
+	return string(shortURL)
+}
